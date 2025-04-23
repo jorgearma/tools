@@ -3,17 +3,139 @@ import sys
 import time
 import random
 import re
-
-import sys
-import time
-import random
-
-import sys
-import time
-import random
 import os
 import shutil
 import itertools
+
+plantilla = """# 🛡️ Penetration Testing Report — Hack The Box
+
+**Target Machine:** `MachineName`  
+**IP Address:** `IP_ADDRESS_HERE`  
+**Date:** `DATE_HERE`  
+**Author:** `YOUR_NAME`
+
+---
+
+## 📁 Table of Contents
+1. Introduction  
+2. Scope and Methodology  
+3. Reconnaissance  
+   - Network Scanning  
+   - Service Enumeration  
+   - Directory Enumeration  
+4. Exploitation  
+   - Vulnerability Identification  
+   - Exploitation Steps  
+5. Post-Exploitation  
+   - Privilege Escalation  
+   - Data Extraction  
+6. Mitigations & Recommendations  
+7. Conclusion  
+8. Appendix  
+9. References  
+
+---
+
+## 1. 🔍 Introduction
+Provide a general description of the penetration test performed on the target machine. Include a brief overview of the nature of the environment (e.g., Hack The Box lab) and the objective of the exercise.
+
+---
+
+## 2. 🎯 Scope and Methodology
+**Scope:**  
+- IP: `INSERT_TARGET_IP`  
+- Define any rules of engagement and boundaries for the assessment.
+
+**Methodology:**  
+- Type of approach (e.g., black-box)  
+- Tools and techniques used (Nmap, Gobuster, Burp Suite, Metasploit, etc.)
+
+---
+
+## 3. 🔎 Reconnaissance
+### Network Scanning
+```bash
+# Nmap command used
+```
+**Open Ports:**
+- ...
+
+### Service Enumeration
+- Services and versions identified
+- Any notable information from banners or responses
+
+### Directory Enumeration
+```bash
+# Gobuster or equivalent tool command
+```
+**Directories discovered:**
+- ...
+
+---
+
+## 4. 💥 Exploitation
+### Vulnerability Identification
+- Describe any vulnerabilities identified
+- Include proof-of-concepts if applicable
+
+### Exploitation Steps
+- Detail the exploitation process
+- Commands used and access gained
+
+---
+
+## 5. 🧠 Post-Exploitation
+### Privilege Escalation
+- Techniques used
+- Files/services that enabled escalation
+
+### Data Extraction
+- Sensitive files retrieved
+- Databases or other critical data accessed
+
+---
+
+## 6. 🔧 Mitigations & Recommendations
+- Software patching
+- Input validation and sanitation
+- File permission hardening
+- Best practice configurations (e.g., SSH settings)
+
+---
+
+## 7. ✅ Conclusion
+Summarize the most important findings and associated risks. Assess the overall impact and provide suggestions for immediate remediation steps.
+
+---
+
+## 8. 📌 Appendix
+- Output files (Nmap scans, scripts, screenshots)
+- Supporting data and evidence
+
+---
+
+## 9. 📚 References
+- Official documentation of tools used
+- OWASP materials, CVE references, etc.
+
+
+"""
+
+enumplantilla = """
+ip:
+titulo:
+CMS:
+frameworks:
+lenguaje/backend:
+hostname:
+servidorweb:
+
+
+
+comportamientos inusuales:
+
+
+mensajes de error:"""
 
 def fake_terminal_prompt(prompt="root@oscp:~# ", duration=5):
     cursor = "_"
@@ -155,16 +277,21 @@ def crear_archivo(ruta, contenido=""):
 
 # 🛠 Lógica principal
 def crear_directorios():
-    carpeta_principal = obtener_nombre_carpeta()
-    
-    subdirectorios = ["nmap", "exploits", "content"]
     print_dragon()
     print(f"{Color.green}═════════════╣ Initializing Operation ╠═════════════{Color.reset}\n")
+
+    carpeta_principal = obtener_nombre_carpeta()
+    subdirectorios = ["nmap", "exploits", "content"]
+
     if not os.path.exists(carpeta_principal):
         os.makedirs(carpeta_principal)
+        ruta = os.path.join(carpeta_principal)
         mensaje_con_spinner(f"{Color.green}[+] Carpeta creada: {Color.blue}{carpeta_principal}{Color.reset}", Color.green)
+        crear_archivo(os.path.join(ruta, f"{carpeta_principal}_report.md"), plantilla)
+        mensaje_con_spinner(f"{Color.green}[+] Archivo de reporte creado: {Color.blue}{carpeta_principal}_report.md{Color.reset}", Color.green)
+        crear_archivo(os.path.join(ruta, "README.txt"), "Este es un archivo de texto de ejemplo.\n")
     else:
-        mensaje_con_spinner(f"{Color.gold}[!] Carpeta ya existente: {Color.blue}{carpeta_principal}{Color.reset}", Color.gold)
+        mensaje_con_spinner(f"{Color.gold}[!] Carpeta ya existente:{Color.blue}{carpeta_principal}{Color.reset}", Color.gold)
 
     for sub in subdirectorios:
         ruta = os.path.join(carpeta_principal, sub)
@@ -175,9 +302,16 @@ def crear_directorios():
             mensaje_con_spinner(f"{Color.gold}[!] Subdirectorio ya existía: {Color.blue}{sub}{Color.reset}", Color.gold)
 
         if sub == "content":
-            crear_archivo(os.path.join(ruta, "credencial.txt"))
             crear_archivo(os.path.join(ruta, "notas.txt"), "Animo, you can do it.\n")
-            mensaje_con_spinner(f"{Color.green}[+] Archivos creados:{Color.reset} credencial.txt & notas.txt")
+            crear_archivo(os.path.join(ruta, "enum.txt"), enumplantilla)
+            os.mkdir(os.path.join(ruta, "screenshots"))
+            mensaje_con_spinner(f"{Color.green}[+] Archivos creados:{Color.reset} enum.txt & notas.txt")
+
+        if sub == "nmap":
+            crear_archivo(os.path.join(ruta, "nmap_report.txt"), "nmap reports.\n")
+
+        if sub == "exploits":
+            crear_archivo(os.path.join(ruta, "exploits_notes.txt"), "exploits notes.\n")    
 
     mensaje_con_spinner(f"{Color.blue}[*] Preparación del entorno OSCP finalizada", Color.blue, duracion=1)
     
