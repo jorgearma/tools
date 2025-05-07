@@ -281,7 +281,7 @@ def crear_directorios():
     print(f"{Color.green}═════════════╣ Initializing Operation ╠═════════════{Color.reset}\n")
 
     carpeta_principal = obtener_nombre_carpeta()
-    subdirectorios = ["nmap", "exploits", "content"]
+    subdirectorios = [ "exploits", "content"]
 
     if not os.path.exists(carpeta_principal):
         os.makedirs(carpeta_principal)
@@ -289,7 +289,8 @@ def crear_directorios():
         mensaje_con_spinner(f"{Color.green}[+] Carpeta creada: {Color.blue}{carpeta_principal}{Color.reset}", Color.green)
         crear_archivo(os.path.join(ruta, f"{carpeta_principal}_report.md"), plantilla)
         mensaje_con_spinner(f"{Color.green}[+] Archivo de reporte creado: {Color.blue}{carpeta_principal}_report.md{Color.reset}", Color.green)
-        crear_archivo(os.path.join(ruta, "README.txt"), "Este es un archivo de texto de ejemplo.\n")
+        crear_archivo(os.path.join(ruta, "README.md"), "Este es un archivo de texto de ejemplo.\n")
+        crear_archivo(os.path.join(ruta, "notas.txt"), "Animo, you can do it.\n")
     else:
         mensaje_con_spinner(f"{Color.gold}[!] Carpeta ya existente:{Color.blue}{carpeta_principal}{Color.reset}", Color.gold)
 
@@ -302,10 +303,10 @@ def crear_directorios():
             mensaje_con_spinner(f"{Color.gold}[!] Subdirectorio ya existía: {Color.blue}{sub}{Color.reset}", Color.gold)
 
         if sub == "content":
-            crear_archivo(os.path.join(ruta, "notas.txt"), "Animo, you can do it.\n")
+            
             crear_archivo(os.path.join(ruta, "enum.txt"), enumplantilla)
             os.mkdir(os.path.join(ruta, "screenshots"))
-            mensaje_con_spinner(f"{Color.green}[+] Archivos creados:{Color.reset} enum.txt & notas.txt")
+            mensaje_con_spinner(f"{Color.green}[+] Archivos creados:{Color.reset} enum.txt ")
 
         if sub == "nmap":
             crear_archivo(os.path.join(ruta, "nmap_report.txt"), "nmap reports.\n")
