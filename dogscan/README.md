@@ -4,10 +4,12 @@
 
 1. Escaneo completo de todos los puertos (`-p-`)
 2. Escaneo detallado con scripts y detección de versiones (`-sC -sV`) sobre los puertos abiertos
+3. Creates a folder with the results in human-readable text format
 
 Ideal para tareas de reconocimiento en auditorías de seguridad y pentesting.
 
 ---
+![dogscan demo](../assets/dogscan_picture.png)
 
 ## 🚀 Características
 
@@ -26,4 +28,3 @@ Ideal para tareas de reconocimiento en auditorías de seguridad y pentesting.
 - Python 3.x
 - [Nmap](https://nmap.org/) instalado y disponible en el `$PATH`
 
-![dogscan demo](../assets/dogscan_full.png)
