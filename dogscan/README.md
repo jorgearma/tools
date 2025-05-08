@@ -26,4 +26,4 @@ Ideal para tareas de reconocimiento en auditorías de seguridad y pentesting.
 - Python 3.x
 - [Nmap](https://nmap.org/) instalado y disponible en el `$PATH`
 
-![dogscan demo](assets/dogscan_full.png)
+![dogscan demo](../assets/dogscan_full.png)
