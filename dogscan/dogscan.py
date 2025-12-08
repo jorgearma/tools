@@ -9,6 +9,7 @@ import subprocess
 import json
 
 from modules  import  ftp , ssh
+from modules import osdetec
 # ===================== COLORES =====================
 RESET = "\033[0m"
 GREEN = "\033[92m"
@@ -21,11 +22,6 @@ LIGHT_GRAY = "\033[37m"
 YELLOW = "\033[93m"
 
 OUTPUT_DIR = "nmap_output"
-
-
-MODULE_MAP = {
-    "21": ftp.enumerate_ftp,
-    "22": ssh.enumerate_ssh,}
 
 
 # ===================== ASCII ART =====================
@@ -57,7 +53,9 @@ def check_nmap():
         print(RED + "[-] Nmap is not installed. Install it first." + RESET)
         sys.exit(1)
 
-
+MODULE_MAP = {
+    "21": ftp.enumerate_ftp,
+    "22": ssh.enumerate_ssh,}
 
 def check_searchsploit():
     if shutil.which("searchsploit") is None:
@@ -70,7 +68,7 @@ def check_searchsploit():
 def run_scan(ip):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     output_file = os.path.join(OUTPUT_DIR, "all_ports.txt")
-    print(LIGHT_GRAY + f"[*] Running full port scan on {ip}..." + RESET)
+    print(LIGHT_GRAY + f"[*] Running full port scan on", CYAN + f" {ip}..." + RESET)
 
     try:
         subprocess.run(
@@ -81,7 +79,7 @@ def run_scan(ip):
         print(RED + f"[-] Nmap scan failed: {e}" + RESET)
         sys.exit(1)
 
-    print(GREEN + f"[+] Scan complete → {output_file}" + RESET)
+    print(GREEN + f"[+] Scan complete →", DARK_GRAY + f"{output_file} \n" + RESET)
     return output_file
 
 
@@ -105,7 +103,7 @@ def run_targeted_scan(ip, open_ports):
     ports_str = ",".join(open_ports)
     output_file = os.path.join(OUTPUT_DIR, "targeted.txt")
 
-    print(LIGHT_GRAY + f"[*] Running targeted scan on: " + CYAN + ports_str + RESET)
+    print(WHITE + f"[*] Running targeted scan on: " + CYAN + ports_str + RESET)
 
     try:
         subprocess.run(
@@ -151,23 +149,21 @@ def extract_banner_from_targeted(port):
 
 # ===================== ANALISIS DE VULNERABILIDADES =====================
 def run_vulnerability_scan(ip, open_ports):
-    print(MAGENTA + "\n====== VULNERABILITY ANALYSIS ======" + RESET)
     searchsploit_available = check_searchsploit()
 
     WEB_PORTS = ["80", "443", "8080", "8000", "8443"]
 
     for port in open_ports:
-        print(CYAN + f"\n[*] Analyzing port {port}..." + RESET)
+        print(MAGENTA + "\n====== VULNERABILITY ANALYSIS ====== \n" + RESET)
+        print(CYAN + f"[*] Analyzing port {port}..." + RESET)
 
-        # 🔹 Definir siempre output_file
+        # 🔹 Archivo donde se guardará la salida
         output_file = os.path.join(OUTPUT_DIR, f"vuln_{port}.txt")
 
-        # ========== AUTO ENUMERATION (Metasploit-Style Modules) ==========
-        if port in MODULE_MAP:
-            module = MODULE_MAP[port](ip, port)
-            run_nmap_scripts(ip, port, module["scripts"], module["name"])
+        # ============================
+        #   1️⃣   VULNERABILITY SCAN
+        # ============================
 
-        # ========== TU ENUMERACIÓN ORIGINAL SIGUE FUNCIONANDO ==========
         if port == "22":
             scripts = "vulners"
             print(LIGHT_GRAY + "[→] Using clean Vulners scan (SSH mode)" + RESET)
@@ -183,8 +179,7 @@ def run_vulnerability_scan(ip, open_ports):
             print(LIGHT_GRAY + "[→] Using full vuln scan" + RESET)
             script_args = ""
 
-        # ========== EJECUTAR NMAP SCRIPT NORMAL ==========
-
+        # --- Ejecutar el escaneo de vulnerabilidades ---
         try:
             cmd = [
                 "nmap", "-Pn", "-sV", "-p", port,
@@ -198,12 +193,16 @@ def run_vulnerability_scan(ip, open_ports):
             cmd += ["-oN", output_file, ip]
 
             subprocess.run(cmd, check=True)
-
-            print(GREEN + f"[+] Scan saved → {output_file}" + RESET)
+            print(GREEN + f"[+] Scan saved → {output_file}" + RESET ,"\n")
+            
 
         except subprocess.CalledProcessError as e:
             print(RED + f"[-] Error scanning port {port}: {e}" + RESET)
 
+
+        # ============================
+        #   2️⃣   BANNER & SEARCHSPLOIT
+        # ============================
 
         banner = extract_banner_from_targeted(port)
 
@@ -214,13 +213,26 @@ def run_vulnerability_scan(ip, open_ports):
                 exploits = search_exploits(banner)
 
                 if exploits:
-                    print(RED + "[+] Exploits encontrados en searchsploit:" + RESET)
+                    print(RED + "[+] Exploits encontrados en searchsploit:" + RESET , "\n" )
                     for e in exploits:
                         title = e.get("Title", "Unknown")
                         path = e.get("Path", "")
                         print(f"   - {RED}{title}{RESET} {DARK_GRAY}({path}){RESET}")
                 else:
-                    print(YELLOW + "[!] No exploits found." + RESET)
+                    print(YELLOW + "[!] No exploits found." + RESET, "\n")
+
+        # ============================
+        #   3️⃣   MODULOS DE ENUMERACION
+        # ============================
+
+        if port in MODULE_MAP:
+            module = MODULE_MAP[port](ip, port)
+
+            # solo correr run_nmap_scripts si el módulo tiene scripts
+            if module["scripts"]:
+                run_nmap_scripts(ip, port, module["scripts"], module["name"])
+
+
 
 
 
@@ -267,12 +279,17 @@ def main():
     print_signature()
     check_nmap()
 
+    # ====== OS DETECTION AL PRINCIPIO ======
+    os_info = osdetec.detect_os(args.ip)
+    print(GREEN + f"[+] OS Detection: {os_info['os']} ({os_info['confidence']})" + RESET)
+    print(LIGHT_GRAY + f"    Reason: {os_info['reason']}" + RESET)
+
     all_ports_file = run_scan(args.ip)
     open_ports = parse_open_ports(all_ports_file)
 
     run_targeted_scan(args.ip, open_ports)
     run_vulnerability_scan(args.ip, open_ports)
-    print(CYAN + "[-] dogs are coming home. 🐶" + RESET)
+
 
 if __name__ == "__main__":
     try:
