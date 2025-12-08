@@ -8,7 +8,7 @@ import argparse
 import subprocess
 import json
 
-from modules  import  ftp 
+from modules  import  ftp , ssh
 # ===================== COLORES =====================
 RESET = "\033[0m"
 GREEN = "\033[92m"
@@ -21,6 +21,11 @@ LIGHT_GRAY = "\033[37m"
 YELLOW = "\033[93m"
 
 OUTPUT_DIR = "nmap_output"
+
+
+MODULE_MAP = {
+    "21": ftp.enumerate_ftp,
+    "22": ssh.enumerate_ssh,}
 
 
 # ===================== ASCII ART =====================
@@ -52,8 +57,7 @@ def check_nmap():
         print(RED + "[-] Nmap is not installed. Install it first." + RESET)
         sys.exit(1)
 
-MODULE_MAP = {
-    "21": ftp.enumerate_ftp,}
+
 
 def check_searchsploit():
     if shutil.which("searchsploit") is None:
@@ -268,7 +272,7 @@ def main():
 
     run_targeted_scan(args.ip, open_ports)
     run_vulnerability_scan(args.ip, open_ports)
-
+    print(CYAN + "[-] dogs are coming home. 🐶" + RESET)
 
 if __name__ == "__main__":
     try:
