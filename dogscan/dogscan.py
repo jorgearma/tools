@@ -55,7 +55,8 @@ def check_nmap():
 
 MODULE_MAP = {
     "21": ftp.enumerate_ftp,
-    "22": ssh.enumerate_ssh,}
+    "22": ssh.enumerate_ssh,
+    "2222": ssh.enumerate_ssh,}
 
 def check_searchsploit():
     if shutil.which("searchsploit") is None:
