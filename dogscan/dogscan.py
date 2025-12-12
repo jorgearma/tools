@@ -8,7 +8,7 @@ import argparse
 import subprocess
 import json
 
-from modules  import  ftp , ssh
+from modules  import  ftp , ssh , smb
 from modules import osdetec
 # ===================== COLORES =====================
 RESET = "\033[0m"
@@ -56,7 +56,9 @@ def check_nmap():
 MODULE_MAP = {
     "21": ftp.enumerate_ftp,
     "22": ssh.enumerate_ssh,
-    "2222": ssh.enumerate_ssh,}
+    "2222": ssh.enumerate_ssh,
+    "445": smb.enumerate_smb,
+    }
 
 def check_searchsploit():
     if shutil.which("searchsploit") is None:
@@ -227,11 +229,17 @@ def run_vulnerability_scan(ip, open_ports):
         # ============================
 
         if port in MODULE_MAP:
-            module = MODULE_MAP[port](ip, port)
 
-            # solo correr run_nmap_scripts si el módulo tiene scripts
+            # SMB necesita lista de puertos
+            if port == "445":
+                module = MODULE_MAP[port](ip, [int(port)])
+            else:
+                module = MODULE_MAP[port](ip, port)
+
+            # correr scripts si el módulo los define
             if module["scripts"]:
                 run_nmap_scripts(ip, port, module["scripts"], module["name"])
+
 
 
 
