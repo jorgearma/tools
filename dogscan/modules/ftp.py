@@ -33,7 +33,7 @@ def enumerate_ftp(ip, port):
 
     scripts_str = ",".join(scripts)
 
-    print(MAGENTA + "\n====== ENUMERATION ANALYSIS ====== \n" + RESET)
+    print(MAGENTA + "\n====== FTP ENUMERATION ANALYSIS ====== \n" + RESET)
     print(f"{CYAN}[→] Running {module_name} on port {port}...{RESET}")
 
     # Ejecutar nmap + scripts

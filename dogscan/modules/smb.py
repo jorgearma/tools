@@ -92,7 +92,7 @@ def smb_fingerprint_nmap(ip, ports, out_file):
         out = f"Nmap error: {e}"
 
     with open(out_file, "a") as f:
-        f.write("=== SMB FINGERPRINT (Nmap) ===\n")
+        f.write("=== SMB FINGERPRINT  (Nmap) ===\n")
         f.write(out + "\n\n")
 
     return out
