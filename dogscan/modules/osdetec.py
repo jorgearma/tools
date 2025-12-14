@@ -7,78 +7,58 @@ RED = "\033[91m"
 YELLOW = "\033[93m"
 LIGHT_GRAY = "\033[37m"
 DARK_GRAY = "\033[90m"
+WHITE = "\033[97m"
 
 
 def detect_os(ip):
-    """
-    Detecta si el objetivo es Windows o Linux usando:
-      - nmap -O
-      - análisis de TTL
-      - heurísticas por puertos/servicios
-
-    Devuelve:
-      {
-        "os": "Linux" | "Windows" | "Unknown",
-        "confidence": "high" | "medium" | "low",
-        "reason": "...explicación..."
-      }
-    """
-
-    print(LIGHT_GRAY + f"[→] Detecting OS on", CYAN +  f"{ip}..." + RESET)
-
     try:
         result = subprocess.run(
             ["nmap", "-O", "--osscan-guess", ip],
             capture_output=True,
             text=True
         )
-    except Exception as e:
-        print(RED + f"[-] OS detection failed: {e}" + RESET)
+    except Exception:
         return {"os": "Unknown", "confidence": "low", "reason": "Nmap execution error"}
 
     output = result.stdout.lower()
 
-    # ====================================================================
-    #   1) ANÁLISIS DIRECTO DE NMAP (más preciso)
-    # ====================================================================
     if "linux" in output:
-        print(GREEN + "[+] OS detected: Linux (from Nmap)" + RESET)
         return {"os": "Linux", "confidence": "high", "reason": "Nmap OS fingerprint"}
 
     if "windows" in output:
-        print(GREEN + "[+] OS detected: Windows (from Nmap)" + RESET)
         return {"os": "Windows", "confidence": "high", "reason": "Nmap OS fingerprint"}
 
-    # ====================================================================
-    #   2) TTL HEURISTICS (muy usado en pentesting real)
-    # ====================================================================
     ttl = _extract_ttl(output)
-
     if ttl:
         if ttl <= 64:
-            print(YELLOW + "[*] TTL suggests Linux" + RESET)
             return {"os": "Linux", "confidence": "medium", "reason": f"TTL={ttl} typical Linux"}
-
         if ttl >= 100:
-            print(YELLOW + "[*] TTL suggests Windows" + RESET)
             return {"os": "Windows", "confidence": "medium", "reason": f"TTL={ttl} typical Windows"}
 
-    # ====================================================================
-    #   3) Heurísticas por puertos comunes
-    # ====================================================================
     if "445/tcp" in output or "smb" in output:
-        print(YELLOW + "[*] SMB detected → Windows likely" + RESET)
-        return {"os": "Windows", "confidence": "medium", "reason": "SMB port or service detected"}
+        return {"os": "Windows", "confidence": "medium", "reason": "SMB service detected"}
 
     if "22/tcp" in output and "ssh" in output:
-        print(YELLOW + "[*] SSH Linux fingerprint → likely Linux" + RESET)
         return {"os": "Linux", "confidence": "medium", "reason": "SSH typical Linux configuration"}
 
-    # ====================================================================
-    #   4) Si no detecta nada concluyente
-    # ====================================================================
-    print(DARK_GRAY + "[-] Could not determine OS." + RESET)
     return {"os": "Unknown", "confidence": "low", "reason": "No reliable fingerprint"}
+
+
+def print_os_detection(ip, os_info):
+
+
+    os_name = os_info["os"]
+    confidence = os_info["confidence"].capitalize()
+    reason = os_info["reason"]
+
+    if os_name == "Unknown":
+        print(YELLOW + "[!] Operating System : Unknown" + RESET)
+    else:
+        print(GREEN + f"[+] Operating System : {os_name}" + RESET)
+
+    print(GREEN + f"[+] Confidence        : {confidence}" + RESET)
+    print(LIGHT_GRAY + f"[→] Detection method  : {reason}\n" + RESET)
+
 
 
 # ---------------------------
@@ -92,3 +72,31 @@ def _extract_ttl(nmap_output):
                 if p.isdigit():
                     return int(p)
     return None
+
+
+def check_host_alive(ip):
+    """
+    Verifica si el host está activo realizando 3 pings ICMP.
+    Devuelve True si al menos uno responde, False en caso contrario.
+    """
+
+    print(WHITE + f"[*] Checking if host is alive..." + RESET)
+
+    try:
+        proc = subprocess.run(
+            ["ping", "-c", "3", "-W", "1", ip],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+
+        if proc.returncode == 0:
+            print(GREEN + f"[✓] Host is alive — {WHITE}the dog has caught the scent 🐕\n" + RESET)
+            return True
+        else:
+            print(RED + "[-] Host did not respond to ICMP ping." + RESET)
+            print(LIGHT_GRAY + "[!] The dog found no trail. Aborting scan.\n" + RESET)
+            return False
+
+    except FileNotFoundError:
+        print(RED + "[-] Ping command not found on this system." + RESET)
+        return False

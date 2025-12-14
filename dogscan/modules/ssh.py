@@ -25,7 +25,7 @@ def enumerate_ssh(ip, port="22"):
 
     out_file = os.path.join(OUTPUT_DIR, f"ssh_enum_{ip}.txt")
 
-    print(MAGENTA + "\n====== SSH ENUMERATION ======" + RESET)
+    print(MAGENTA + "====== SSH ENUMERATION ======\n" + RESET)
     print(f"{WHITE}[→] Target: {ip}:{port}{RESET}")
 
     with open(out_file, "w") as f:

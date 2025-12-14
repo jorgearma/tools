@@ -8,8 +8,10 @@ import argparse
 import subprocess
 import json
 
-from modules  import  ftp , ssh , smb
+from modules  import  ftp , ssh , smb 
 from modules import osdetec
+from modules.barradecarga import barra_carga
+
 # ===================== COLORES =====================
 RESET = "\033[0m"
 GREEN = "\033[92m"
@@ -68,21 +70,76 @@ def check_searchsploit():
 
 
 # ===================== SCAN COMPLETO =====================
+import os
+import re
+import sys
+import subprocess
+import threading
+
+
+# Regex para capturar porcentaje REAL de Nmap
+PERCENT_RE = re.compile(r"About\s+([\d.]+)%\s+done")
+
+
 def run_scan(ip):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     output_file = os.path.join(OUTPUT_DIR, "all_ports.txt")
-    print(LIGHT_GRAY + f"[*] Running full port scan on", CYAN + f" {ip}..." + RESET)
+
+    print(f"{WHITE}[*] Running full port scan on {CYAN}{ip}{RESET}")
+
+
+    stop_event = threading.Event()
+    progress_ref = {"percent": None}
+
+    loader = threading.Thread(
+        target=barra_carga,
+        args=("NMAP", stop_event, progress_ref),
+        daemon=True
+    )
+    loader.start() 
 
     try:
-        subprocess.run(
-            ["nmap", "-Pn", "-p-", "-T4", "--min-rate=1000", "-oN", output_file, ip],
-            check=True
+        proc = subprocess.Popen(
+            [
+                "nmap", "-Pn", "-p-", "-T4",
+                "--min-rate=1000",
+                "-oN", output_file,
+                ip
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1
         )
-    except subprocess.CalledProcessError as e:
-        print(RED + f"[-] Nmap scan failed: {e}" + RESET)
-        sys.exit(1)
 
-    print(GREEN + f"[+] Scan complete →", DARK_GRAY + f"{output_file} \n" + RESET)
+        while True:
+            line = proc.stdout.readline()
+
+            if not line:
+                if proc.poll() is not None:
+                    break
+                continue
+
+            match = PERCENT_RE.search(line)
+            if match:
+                progress_ref["percent"] = float(match.group(1))
+
+    finally:
+        stop_event.set()
+        loader.join()
+
+    # Validación fuerte
+    if not os.path.exists(output_file):
+        raise RuntimeError("Nmap output file was not created")
+
+    print( GREEN +"[+] Scan complete\n" + RESET)
+
+    with open(output_file, "r") as f:
+        for line in f:
+            if line.startswith("#") or not line.strip():
+                continue
+            print(line.rstrip())
+
     return output_file
 
 
@@ -101,23 +158,68 @@ def parse_open_ports(filename):
 def run_targeted_scan(ip, open_ports):
     if not open_ports:
         print(RED + "[-] No open ports found." + RESET)
-        return
+        return None
 
     ports_str = ",".join(open_ports)
     output_file = os.path.join(OUTPUT_DIR, "targeted.txt")
 
-    print(WHITE + f"[*] Running targeted scan on: " + CYAN + ports_str + RESET)
+    print(f"{WHITE}\n[*] Running targeted scan on ports {CYAN}{ports_str}{RESET}")
+
+    stop_event = threading.Event()
+    progress_ref = {"percent": None}
+
+    loader = threading.Thread(
+        target=barra_carga,
+        args=("NMAP", stop_event, progress_ref),
+        daemon=True
+    )
+    loader.start()
 
     try:
-        subprocess.run(
-            ["nmap", "-sC", "-sV", "-p", ports_str, "-oN", output_file, ip],
-            check=True
+        proc = subprocess.Popen(
+            [
+                "nmap", "-sC", "-sV",
+                "-p", ports_str,
+                "-oN", output_file,
+                ip
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1
         )
-        print(GREEN + f"[+] Targeted scan saved → {output_file}" + RESET)
 
-    except subprocess.CalledProcessError as e:
-        print(RED + f"[-] Targeted scan failed: {e}" + RESET)
+        while True:
+            line = proc.stdout.readline()
 
+            if not line:
+                if proc.poll() is not None:
+                    break
+                continue
+
+            # Captura de progreso real
+            match = PERCENT_RE.search(line)
+            if match:
+                progress_ref["percent"] = float(match.group(1))
+
+    finally:
+        stop_event.set()
+        loader.join()
+
+    # Validación fuerte
+    if not os.path.exists(output_file):
+        raise RuntimeError("Targeted Nmap output file was not created")
+
+    print(GREEN + "[+] Targeted scan complete\n" + RESET)
+
+    # Mostrar salida limpia
+    with open(output_file, "r") as f:
+        for line in f:
+            if line.startswith("#") or not line.strip():
+                continue
+            print(line.rstrip())
+
+    return output_file
 
 # ===================== SEARCHSPLOIT =====================
 def search_exploits(service_banner):
@@ -153,36 +255,47 @@ def extract_banner_from_targeted(port):
 # ===================== ANALISIS DE VULNERABILIDADES =====================
 def run_vulnerability_scan(ip, open_ports):
     searchsploit_available = check_searchsploit()
-
     WEB_PORTS = ["80", "443", "8080", "8000", "8443"]
 
     for port in open_ports:
-        print(MAGENTA + "\n====== VULNERABILITY ANALYSIS ====== \n" + RESET)
-        print(CYAN + f"[*] Analyzing port {port}..." + RESET)
+        print(MAGENTA + f"\n====== VULNERABILITY ANALYSIS PORT {port} ======\n" + RESET)
 
-        # 🔹 Archivo donde se guardará la salida
         output_file = os.path.join(OUTPUT_DIR, f"vuln_{port}.txt")
 
-        # ============================
-        #   1️⃣   VULNERABILITY SCAN
-        # ============================
-
+        # -----------------------------
+        # Selección de scripts
+        # -----------------------------
         if port == "22":
             scripts = "vulners"
-            print(LIGHT_GRAY + "[→] Using clean Vulners scan (SSH mode)" + RESET)
-            script_args = "--script-args=mincvss=9.8"
+            script_args = "--script-args=mincvss=9.9"
+            print(WHITE + f"[→] Running full vuln scan on {CYAN}{ip}:{port}" + RESET)
 
         elif port in WEB_PORTS:
-            scripts = "http-title,http-server-header,http-methods,http-enum,http-csrf,http-headers"
-            print(LIGHT_GRAY + "[→] Using lightweight HTTP scripts" + RESET)
+            scripts = (
+                "http-title,http-server-header,http-methods,"
+                "http-enum,http-csrf,http-headers"
+            )
             script_args = ""
+            print(WHITE + "[→] Using lightweight HTTP scripts" + RESET)
 
         else:
             scripts = "vuln"
-            print(LIGHT_GRAY + "[→] Using full vuln scan" + RESET)
-            script_args = ""
+            script_args = "--script-args=mincvss=9.9"
+            print(WHITE + f"[→] Running full vuln scan on {CYAN}{ip}:{port}" + RESET)
 
-        # --- Ejecutar el escaneo de vulnerabilidades ---
+        # -----------------------------
+        # Barra de progreso
+        # -----------------------------
+        stop_event = threading.Event()
+        progress_ref = {"percent": None}
+
+        loader = threading.Thread(
+            target=barra_carga,
+            args=(f"VULN:{port}", stop_event, progress_ref),
+            daemon=True
+        )
+        loader.start()
+
         try:
             cmd = [
                 "nmap", "-Pn", "-sV", "-p", port,
@@ -195,13 +308,48 @@ def run_vulnerability_scan(ip, open_ports):
 
             cmd += ["-oN", output_file, ip]
 
-            subprocess.run(cmd, check=True)
-            print(GREEN + f"[+] Scan saved → {output_file}" + RESET ,"\n")
-            
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1
+            )
 
-        except subprocess.CalledProcessError as e:
-            print(RED + f"[-] Error scanning port {port}: {e}" + RESET)
+            while True:
+                line = proc.stdout.readline()
 
+                if not line:
+                    if proc.poll() is not None:
+                        break
+                    continue
+
+                # Progreso real si aparece
+                match = PERCENT_RE.search(line)
+                if match:
+                    progress_ref["percent"] = float(match.group(1))
+
+        finally:
+            stop_event.set()
+            loader.join()
+
+        # -----------------------------
+        # Validación fuerte
+        # -----------------------------
+        if not os.path.exists(output_file):
+            print(RED + f"[-] Vuln scan failed on port {port}" + RESET)
+            continue
+
+        print(GREEN + f"[+] Vulnerability scan complete → {output_file}\n" + RESET)
+
+        # -----------------------------
+        # Mostrar salida limpia
+        # -----------------------------
+        with open(output_file, "r") as f:
+            for line in f:
+                if line.startswith("#") or not line.strip():
+                    continue
+                print(line.rstrip())
 
         # ============================
         #   2️⃣   BANNER & SEARCHSPLOIT
@@ -210,7 +358,7 @@ def run_vulnerability_scan(ip, open_ports):
         banner = extract_banner_from_targeted(port)
 
         if banner:
-            print(f"{CYAN}[→] Detected service:{RESET} {WHITE}{banner}{RESET}")
+            print(f"\n{CYAN}[→] Detected service:{RESET} {WHITE}{banner}{RESET}")
 
             if searchsploit_available:
                 exploits = search_exploits(banner)
@@ -289,9 +437,14 @@ def main():
     check_nmap()
 
     # ====== OS DETECTION AL PRINCIPIO ======
+    if not osdetec.check_host_alive(args.ip):
+        sys.exit(1)
+        
+    print(MAGENTA + "═════════════════ OS DETECTION ═════════════════" + RESET)
+    print(LIGHT_GRAY + "[→] Detecting OS on " + CYAN + args.ip + "\n" + RESET)
     os_info = osdetec.detect_os(args.ip)
-    print(GREEN + f"[+] OS Detection: {os_info['os']} ({os_info['confidence']})" + RESET)
-    print(LIGHT_GRAY + f"    Reason: {os_info['reason']}" + RESET)
+    osdetec.print_os_detection(args.ip, os_info) 
+
 
     all_ports_file = run_scan(args.ip)
     open_ports = parse_open_ports(all_ports_file)
@@ -307,3 +460,4 @@ if __name__ == "__main__":
         print("\n" + RED + "[!] Scan cancelled by user." + RESET)
         print(CYAN + "[-] dogs are coming home. 🐶" + RESET)
         sys.exit(0)
+
