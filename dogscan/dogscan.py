@@ -45,7 +45,7 @@ def ascii_art():
 # ===================== FIRMA =====================
 def print_signature():
     print(DARK_GRAY + "═" * 65 + RESET)
-    print(LIGHT_GRAY + "[*] version: " + CYAN + "dogscan 1.1.0" + RESET)
+    print(LIGHT_GRAY + "[*] version: " + CYAN + "dogscan 1.5.0" + RESET)
     print(LIGHT_GRAY + "[*] Developer: " + CYAN + "jorgearma" + RESET)
     print(LIGHT_GRAY + "[*] GitHub: " + CYAN + "https://github.com/jorgearma" + RESET)
     print(DARK_GRAY + "═" * 65 + RESET)
