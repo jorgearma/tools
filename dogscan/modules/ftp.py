@@ -1,5 +1,8 @@
 import os
 import subprocess
+import threading
+
+from modules.barradecarga import barra_carga
 
 RESET = "\033[0m"
 GREEN = "\033[92m"
@@ -11,15 +14,14 @@ DARK_GRAY = "\033[90m"
 LIGHT_GRAY = "\033[37m"
 YELLOW = "\033[93m"
 
-OUTPUT_DIR = "nmap_output"
-# Esto asume que tienes un archivo colors.py con tus colores.
-# Si no, puedo generarlo.
 
+def enumerate_ftp(ip, port, base_output_dir):
 
+    ftp_output_dir = os.path.join(base_output_dir, "ftp")
+    os.makedirs(ftp_output_dir, mode=0o700, exist_ok=True)
 
-def enumerate_ftp(ip, port):
-    module_name = "FTP Enumeration"
-    output_file = os.path.join(OUTPUT_DIR, f"ftp_enum_{port}.txt")
+    output_file = os.path.join(ftp_output_dir, f"ftp_enum_{port}.txt")
+
 
     scripts = [
         "ftp-anon",
@@ -33,46 +35,64 @@ def enumerate_ftp(ip, port):
 
     scripts_str = ",".join(scripts)
 
-    print(MAGENTA + "\n====== FTP ENUMERATION ANALYSIS ====== \n" + RESET)
-    print(f"{CYAN}[→] Running {module_name} on port {port}...{RESET}")
+    print(MAGENTA + "\n====== FTP ENUMERATION ANALYSIS ======" + RESET)
+    print(f"{WHITE}[→] Running FTP enumeration on port {port}...{RESET}")
 
-    # Ejecutar nmap + scripts
+    # ── PROGRESS BAR (IGUAL QUE SSH) ─────────────────────────
+    stop_event = threading.Event()
+    progress_ref = {"percent": None}
+
+    loader = threading.Thread(
+        target=barra_carga,
+        args=("FTP", stop_event, progress_ref),
+        daemon=True
+    )
+    loader.start()
+
     try:
-        subprocess.run(
+        proc = subprocess.Popen(
             [
                 "nmap", "-Pn",
-                "-p", port,
+                "-p", str(port),
                 f"--script={scripts_str}",
                 "--script-timeout=40s",
                 "-oN", output_file,
                 ip
             ],
-            check=True
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True
         )
 
-    except subprocess.CalledProcessError as e:
-        print(f"{RED}[-] FTP enumeration failed: {e}{RESET}")
-        return
+        # 🔒 MISMO COMPORTAMIENTO QUE SSH
+        for _ in proc.stdout:
+            pass
 
-    # ============================
-    #  ANALISIS INTELIGENTE
-    # ============================
+        proc.wait()
+
+    finally:
+        stop_event.set()
+        loader.join()
+
+    print(f"{GREEN}[+] FTP scripts completed.{RESET}")
+
+    # ── INTELLIGENT ANALYSIS (POST-SCAN) ─────────────────────
     valid_creds = test_default_ftp_credentials(ip, port)
-    try_ftp_download(ip, port, valid_creds)
-
-    detect_ftps(ip,port)
+    try_ftp_download(ip, port, valid_creds, ftp_output_dir)
 
 
-
+    detect_ftps(ip, port)
     analyze_ftp_output(output_file)
+
     print(f"{GREEN}[+] FTP enumeration saved → {output_file}{RESET}")
 
-
-    # 🔙 DEVOLVER UN DICCIONARIO PARA QUE EL CORE NO ROMPA
     return {
         "name": "FTP Enumeration",
-        "scripts": []  # vacío porque ya ejecutamos los scripts en el módulo
+        "scripts": []
     }
+
+
+
 
 
 def analyze_ftp_output(filepath):
@@ -189,18 +209,20 @@ def test_default_ftp_credentials(ip, port):
 
 
 
-def try_ftp_download(ip, port, creds, output_dir="ftp_download"):
+def try_ftp_download(ip, port, creds, ftp_output_dir):
     """
     creds = lista de tuplas [(user, pass), ...]
     output_dir = carpeta donde se guardarán los archivos extraídos
     """
+    download_dir = os.path.join(ftp_output_dir, "downloads")
+    os.makedirs(download_dir, mode=0o700, exist_ok=True)
 
     if not creds:
         print(f"{DARK_GRAY}[-] No credentials available for file download.{RESET}")
         return
 
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+    if not os.path.exists(download_dir):
+        os.makedirs(download_dir)
 
     print(f"\n{CYAN}[→] Checking if files can be listed / downloaded...{RESET}\n")
 
@@ -227,23 +249,23 @@ def try_ftp_download(ip, port, creds, output_dir="ftp_download"):
             print(f"     {GREEN}[+] Listing enabled → Files are visible.{RESET}")
 
             # Guardar el listing
-            listing_file = os.path.join(output_dir, f"{ip}_{port}_listing.txt")
+            listing_file = os.path.join(download_dir, f"{ip}_{port}_listing.txt")
             with open(listing_file, "w") as f:
                 f.write(result.stdout)
 
-            print(f"     {GREEN}[+] Directory listing saved → {listing_file}{RESET}")
+            print(f"     {GREEN}[+] Directory listing saved → {DARK_GRAY}{listing_file}{RESET}")
 
             # 3) Intento de descarga RECURSIVA (mirror completo)
             print(f"     {CYAN}[→] Starting recursive download...{RESET}")
             
             wget_cmd = (
                 f"wget -m --no-passive ftp://{user}:{passwd}@{ip}:{port} "
-                f"-P {output_dir} 2>/dev/null"
+                f"-P {download_dir} 2>/dev/null"
             )
 
             subprocess.run(["bash", "-c", wget_cmd])
 
-            print(f"     {GREEN}[+] Download completed → {output_dir}{RESET}\n")
+            print(f"     {GREEN}[+] Download completed →{DARK_GRAY}{download_dir}{RESET}\n")
 
         else:
             print(f"     {RED}[-] Listing blocked for {user}:{passwd}{RESET}\n")

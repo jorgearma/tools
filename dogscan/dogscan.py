@@ -23,7 +23,9 @@ DARK_GRAY = "\033[90m"
 LIGHT_GRAY = "\033[37m"
 YELLOW = "\033[93m"
 
-OUTPUT_DIR = "nmap_output"
+BASE_DIR = os.getcwd()
+OUTPUT_DIR = os.path.join(BASE_DIR, f"nmap_output")
+
 
 
 # ===================== ASCII ART =====================
@@ -62,6 +64,20 @@ MODULE_MAP = {
     "445": smb.enumerate_smb,
     }
 
+def prepare_output_dir():
+    # Bloquear symlinks (hardening básico)
+    if os.path.islink(OUTPUT_DIR):
+        print(RED + "[-] OUTPUT_DIR is a symlink. Aborting." + RESET)
+        sys.exit(1)
+
+    # Crear directorio con permisos seguros
+    os.makedirs(OUTPUT_DIR, mode=0o700, exist_ok=True)
+
+    # Verificar que es un directorio real
+    if not os.path.isdir(OUTPUT_DIR):
+        print(RED + "[-] OUTPUT_DIR is not a directory." + RESET)
+        sys.exit(1)
+
 def check_searchsploit():
     if shutil.which("searchsploit") is None:
         print(YELLOW + "[!] searchsploit not found. Exploit detection limited." + RESET)
@@ -84,7 +100,7 @@ PERCENT_RE = re.compile(r"About\s+([\d.]+)%\s+done")
 def run_scan(ip):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     output_file = os.path.join(OUTPUT_DIR, "all_ports.txt")
-
+    print(f"{MAGENTA}══════════════ Port Discovery Scan ═════════════{RESET} ")
     print(f"{WHITE}[*] Running full port scan on {CYAN}{ip}{RESET}")
 
 
@@ -136,11 +152,23 @@ def run_scan(ip):
 
     with open(output_file, "r") as f:
         for line in f:
-            if line.startswith("#") or not line.strip():
+            line = line.rstrip()
+
+            if not line:
                 continue
-            print(line.rstrip())
+            if line.startswith("#"):
+                continue
+            if line.startswith("Nmap scan report for"):
+                continue
+            if line.startswith("Host is up"):
+                continue
+            if line.startswith("Not shown:"):
+                continue
+
+            print(line)
 
     return output_file
+
 
 
 # ===================== PARSEAR PUERTOS =====================
@@ -162,8 +190,8 @@ def run_targeted_scan(ip, open_ports):
 
     ports_str = ",".join(open_ports)
     output_file = os.path.join(OUTPUT_DIR, "targeted.txt")
-
-    print(f"{WHITE}\n[*] Running targeted scan on ports {CYAN}{ports_str}{RESET}")
+    print(f"{MAGENTA}\n══════════════════ Target Scan  ═════════════════{RESET} ")
+    print(f"{WHITE}[*] Running targeted scan on ports {CYAN}{ports_str}{RESET}")
 
     stop_event = threading.Event()
     progress_ref = {"percent": None}
@@ -215,11 +243,25 @@ def run_targeted_scan(ip, open_ports):
     # Mostrar salida limpia
     with open(output_file, "r") as f:
         for line in f:
-            if line.startswith("#") or not line.strip():
+            line = line.rstrip()
+
+            if not line:
                 continue
-            print(line.rstrip())
+            if line.startswith("#"):
+                continue
+            if line.startswith("Nmap scan report for"):
+                continue
+            if line.startswith("Host is up"):
+                continue
+            if line.startswith("Not shown:"):
+                continue
+            if line.startswith("service"):
+                continue        
+            print(line)
 
     return output_file
+
+
 
 # ===================== SEARCHSPLOIT =====================
 def search_exploits(service_banner):
@@ -253,12 +295,63 @@ def extract_banner_from_targeted(port):
 
 
 # ===================== ANALISIS DE VULNERABILIDADES =====================
+import re
+
+def print_clean_vuln_summary(filename):
+    cves = set()
+    exploit_count = 0
+    in_vulners = False
+
+    with open(filename, "r") as f:
+        for line in f:
+            line = line.rstrip()
+
+            # Detectar inicio de vulners
+            if "| vulners:" in line:
+                in_vulners = True
+                continue
+
+            if in_vulners:
+                # Fin del bloque vulners
+                if not line.startswith("|"):
+                    in_vulners = False
+                    continue
+
+                # Capturar CVEs
+                cve_match = re.search(r"(CVE-\d{4}-\d+)", line)
+                if cve_match:
+                    cves.add(cve_match.group(1))
+
+                # Contar exploits públicos
+                if "*EXPLOIT*" in line:
+                    exploit_count += 1
+
+    # ============================
+    #  SALIDA LIMPIA
+    # ============================
+    if cves:
+        print(f"{YELLOW}[!] Vulnerabilities detected:{RESET}")
+        for cve in sorted(cves):
+            print(f"    └─ {cve}")
+
+        if exploit_count:
+            print(f"    └─ {exploit_count} public exploits available")
+
+        print(f"\n{GREEN}[→] Full vulnerability details saved to:{RESET}")
+        print(f"    {filename}")
+
+    else:
+        print(f"{GREEN}[+] No known vulnerabilities detected by Nmap scripts{RESET}")
+        print(f"{CYAN}[→] Full scan output saved to:{RESET}")
+        print(f"    {filename}")
+
+
 def run_vulnerability_scan(ip, open_ports):
     searchsploit_available = check_searchsploit()
     WEB_PORTS = ["80", "443", "8080", "8000", "8443"]
 
     for port in open_ports:
-        print(MAGENTA + f"\n====== VULNERABILITY ANALYSIS PORT {port} ======\n" + RESET)
+        print(MAGENTA + f"\n======= VULNERABILITY ANALYSIS PORT {port} =======" + RESET)
 
         output_file = os.path.join(OUTPUT_DIR, f"vuln_{port}.txt")
 
@@ -281,7 +374,7 @@ def run_vulnerability_scan(ip, open_ports):
         else:
             scripts = "vuln"
             script_args = "--script-args=mincvss=9.9"
-            print(WHITE + f"[→] Running full vuln scan on {CYAN}{ip}:{port}" + RESET)
+            print(WHITE + f"[→] Running full vuln scan on {CYAN}{ip}{WHITE} (port:{port})" + RESET)
 
         # -----------------------------
         # Barra de progreso
@@ -340,16 +433,11 @@ def run_vulnerability_scan(ip, open_ports):
             print(RED + f"[-] Vuln scan failed on port {port}" + RESET)
             continue
 
-        print(GREEN + f"[+] Vulnerability scan complete → {output_file}\n" + RESET)
 
         # -----------------------------
         # Mostrar salida limpia
         # -----------------------------
-        with open(output_file, "r") as f:
-            for line in f:
-                if line.startswith("#") or not line.strip():
-                    continue
-                print(line.rstrip())
+        print_clean_vuln_summary(output_file)
 
         # ============================
         #   2️⃣   BANNER & SEARCHSPLOIT
@@ -380,9 +468,10 @@ def run_vulnerability_scan(ip, open_ports):
 
             # SMB necesita lista de puertos
             if port == "445":
-                module = MODULE_MAP[port](ip, [int(port)])
+                module = MODULE_MAP[port](ip, [int(port)], OUTPUT_DIR)
             else:
-                module = MODULE_MAP[port](ip, port)
+                module = MODULE_MAP[port](ip, port, OUTPUT_DIR)
+
 
             # correr scripts si el módulo los define
             if module["scripts"]:
@@ -429,7 +518,15 @@ def validate_ip(ip):
 def main():
     parser = argparse.ArgumentParser(description="dogscan - simple nmap wrapper")
     parser.add_argument("ip", help="Target IP address")
+
+    parser.add_argument(
+        "--mode",
+        choices=["fast", "medium", "deep"],
+        default="deep"
+    )
+
     args = parser.parse_args()
+    prepare_output_dir() 
 
     ascii_art()
     validate_ip(args.ip)
@@ -443,15 +540,18 @@ def main():
     print(MAGENTA + "═════════════════ OS DETECTION ═════════════════" + RESET)
     print(LIGHT_GRAY + "[→] Detecting OS on " + CYAN + args.ip + "\n" + RESET)
     os_info = osdetec.detect_os(args.ip)
-    osdetec.print_os_detection(args.ip, os_info) 
-
+    osdetec.print_os_detection(args.ip, os_info)
 
     all_ports_file = run_scan(args.ip)
     open_ports = parse_open_ports(all_ports_file)
 
-    run_targeted_scan(args.ip, open_ports)
-    run_vulnerability_scan(args.ip, open_ports)
+    if args.mode in ("medium", "deep"):
+        run_targeted_scan(args.ip, open_ports)
 
+    if args.mode == "deep":
+        run_vulnerability_scan(args.ip, open_ports)
+
+    print(CYAN + "\n[-] dogs are coming home. 🐶" + RESET)
 
 if __name__ == "__main__":
     try:
@@ -460,4 +560,5 @@ if __name__ == "__main__":
         print("\n" + RED + "[!] Scan cancelled by user." + RESET)
         print(CYAN + "[-] dogs are coming home. 🐶" + RESET)
         sys.exit(0)
+
 

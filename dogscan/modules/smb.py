@@ -1,6 +1,9 @@
 import os
 import re
 import subprocess
+import threading
+
+from modules.barradecarga import barra_carga
 
 # Colores DogScan
 RESET = "\033[0m"
@@ -19,16 +22,20 @@ def strip_colors(text: str) -> str:
     return ANSI_RE.sub("", text)
 
 
-def enumerate_smb(ip: str, ports=None):
+def enumerate_smb(ip: str, ports=None, base_output_dir=None):
     if isinstance(ports, str):
         ports = [int(ports)]
     if ports is None:
         ports = [445]
 
-    if not os.path.exists(OUTPUT_DIR):
-        os.makedirs(OUTPUT_DIR)
+    if base_output_dir is None:
+        raise ValueError("base_output_dir is required")
 
-    out_file = os.path.join(OUTPUT_DIR, f"smb_enum_{ip}.txt")
+    smb_output_dir = os.path.join(base_output_dir, "smb")
+    os.makedirs(smb_output_dir, mode=0o700, exist_ok=True)
+
+    out_file = os.path.join(smb_output_dir, f"smb_enum_{ip}.txt")
+
 
     print(MAGENTA + "\n====== SMB ENUMERATION ======" + RESET)
     print(f"{WHITE}[→] Target: {ip} (ports: {', '.join(map(str, ports))}){RESET}")
@@ -51,7 +58,7 @@ def enumerate_smb(ip: str, ports=None):
     # 5) DETECTAR POSIBLES CVEs
     smb_detect_possible_cves(banner_info, out_file)
 
-    print(f"\n{GREEN}[✔] SMB enumeration completed → {out_file}{RESET}\n")
+    print(f"\n{GREEN}[✔] SMB enumeration completed →{DARK_GRAY}{out_file}{RESET}\n")
 
     return {
         "name": "...",
@@ -64,8 +71,6 @@ def enumerate_smb(ip: str, ports=None):
 # 1) SMB FINGERPRINTING (Nmap)
 # --------------------------------------------------------------------
 def smb_fingerprint_nmap(ip, ports, out_file):
-    print(f"{CYAN}[→] Running SMB fingerprinting (Nmap)...{RESET}")
-
     port_args = ",".join(map(str, ports))
 
     scripts = [
@@ -77,25 +82,59 @@ def smb_fingerprint_nmap(ip, ports, out_file):
     ]
 
     cmd = [
-        "nmap","-Pn","-p", port_args,
+        "nmap", "-Pn",
+        "-p", port_args,
         "--script=" + ",".join(scripts),
         "-sV",
         ip
     ]
 
+    print(f"{CYAN}[→] Running SMB fingerprinting (Nmap)...{RESET}")
+
+    # ── PROGRESS BAR (MISMO PATRÓN) ──────────────────────────
+    stop_event = threading.Event()
+    progress_ref = {"percent": None}
+
+    loader = threading.Thread(
+        target=barra_carga,
+        args=("SMB", stop_event, progress_ref),
+        daemon=True
+    )
+    loader.start()
+
     try:
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        out = result.stdout
-        print(f"{GREEN}[+] SMB fingerprint collected.{RESET}")
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True
+        )
+
+        output_lines = []
+
+        # 🔒 NO PRINTS, SOLO CONSUMIR
+        for line in proc.stdout:
+            output_lines.append(line)
+
+        proc.wait()
+
     except Exception as e:
-        print(f"{RED}[!] Error executing Nmap: {e}{RESET}")
-        out = f"Nmap error: {e}"
+        output_lines = [f"Nmap error: {e}\n"]
 
+    finally:
+        stop_event.set()
+        loader.join()
+
+    print(f"{GREEN}[+] SMB fingerprint collected.{RESET}")
+
+    # ── WRITE OUTPUT ─────────────────────────────────────────
     with open(out_file, "a") as f:
-        f.write("=== SMB FINGERPRINT  (Nmap) ===\n")
-        f.write(out + "\n\n")
+        f.write("=== SMB FINGERPRINT (Nmap) ===\n")
+        f.writelines(output_lines)
+        f.write("\n")
 
-    return out
+    return "".join(output_lines)
+
 
 
 
