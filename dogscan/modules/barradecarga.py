@@ -28,7 +28,22 @@ def barra_carga(label, stop_event, progress_ref, width=20, speed=0.15):
         "Patience…",
         "The dogs are searching",
         "Following the scent",
+        "Sniffing open ports",
+        "Tracking service responses",
+        "Analyzing network traces",
+        "Probing the perimeter",
+        "Mapping the attack surface",
+        "Enumerating exposed services",
+        "Correlating fingerprints",
+        "Listening for weak signals",
+        "Hunting for misconfigurations",
+        "Parsing protocol behavior",
+        "Identifying response patterns",
+        "Scanning for anomalies",
+        "Following the trail",
+        "Waiting for the target to slip",
     ])
+
 
     cycle = 1
     message = next(messages)
