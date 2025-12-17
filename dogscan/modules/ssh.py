@@ -74,6 +74,23 @@ def enumerate_ssh(ip, port="22", base_output_dir="nmap_output"):
 
     print(f"{GREEN}[+] SSH scripts completed.{RESET}")
 
+        # ── SSH AUTH METHODS (IMPORTANT) ─────────────────────────
+    auth_methods = parse_ssh_auth_methods(out_file)
+
+    if auth_methods:
+        print(MAGENTA + "\n============ SSH AUTHENTICATION ============" + RESET)
+        print(f"{GREEN}[✓] Supported authentication methods:{RESET}")
+
+        for m in auth_methods:
+            print(f"{CYAN}    - {m}{RESET}")
+
+        if "password" in auth_methods:
+            print(f"{YELLOW}[→] Password-based authentication is ENABLED{RESET}")
+
+        if "publickey" in auth_methods:
+            print(f"{YELLOW}[→] Public key authentication is ENABLED{RESET}")
+
+
     # ── UNAUTHENTICATED LOGIN TEST ───────────────────────────
     unauth_info = test_unauthenticated_login(ip, port, out_file)
 
@@ -182,3 +199,55 @@ def test_username_enumeration(ip, port, out_file):
             f.write(re.sub(r"\x1b\[[0-9;]*m", "", i) + "\n")
 
     print(f"\n{GREEN}[✔] SSH enumeration completed and saved. → {LIGHT_GRAY} {out_file} {RESET}\n")
+
+
+
+
+# ─────────────────────────────────────────────────────────────
+# PARSE SSH AUTH METHODS (STRICT)
+# ─────────────────────────────────────────────────────────────
+def parse_ssh_auth_methods(nmap_file):
+
+    valid_methods = {
+        "publickey",
+        "password",
+        "keyboard-interactive",
+        "gssapi-with-mic"
+    }
+
+    methods = []
+    inside_auth_block = False
+
+    try:
+        with open(nmap_file, "r") as f:
+            for line in f:
+
+                # Entrar solo cuando empieza ssh-auth-methods
+                if line.strip().startswith("| ssh-auth-methods"):
+                    inside_auth_block = True
+                    continue
+
+                if inside_auth_block:
+
+                    # Fin del bloque
+                    if line.strip().startswith("|_"):
+                        candidate = line.replace("|_", "").strip()
+                        if candidate in valid_methods:
+                            methods.append(candidate)
+                        break
+
+                    # Líneas normales del bloque
+                    if line.strip().startswith("|"):
+                        candidate = line.replace("|", "").strip()
+
+                        # Ignorar encabezados
+                        if "Supported authentication methods" in candidate:
+                            continue
+
+                        if candidate in valid_methods:
+                            methods.append(candidate)
+
+    except Exception:
+        pass
+
+    return methods
